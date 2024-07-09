@@ -35,6 +35,7 @@ const db = new sqlite3.Database("tax_reply.db");
 
 const port = process.env.PORT || 3000;
 
+// UPLOAD NOTICE
 app.post(
   "/api/v1/upload-notice",
   upload.single("notice-file"),
@@ -116,7 +117,90 @@ app.post(
   }
 );
 
-app.get("/api/v1/notices", (req, res) => {
+// UPLOAD REPLY
+
+app.post(
+  "/api/v1/upload-reply",
+  upload.single("reply-file"),
+  async (req, res) => {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    try {
+      const buffer = fs.readFileSync(file.path);
+      const parsedData = await pdfParse(buffer);
+      const textContent = parsedData.text;
+
+      // Generate prompt for Gemini API
+      const prompt = `Clear any existing data. Based on the content ${textContent}, provide a JSON object with the following keys and their corresponding values, extracted from the text:
+  
+        - PAN (if available)
+        - Date
+        - DIN
+        - Address
+        - AssessmentYear
+        - Sections`;
+
+      // Call Gemini API
+      const extractedData = await generateGeminiResponse(prompt);
+      const cleanedData = extractedData.replace(/```json|```/g, "");
+
+      const jsonData = JSON.parse(cleanedData);
+      const { Address, PAN, AssessmentYear, DIN, Date, Sections } = jsonData;
+
+      // Create PAN directory inside month-year directory
+      const panDir = path.join(uploadBaseDir, `${monthDir}/${PAN}`);
+      if (!fs.existsSync(panDir)) {
+        fs.mkdirSync(panDir, { recursive: true });
+        console.log(`Created PAN directory at ${panDir}`);
+      }
+
+      // Move the uploaded file to the PAN directory
+      const newFilePath = path.join(panDir, file.originalname);
+      fs.renameSync(file.path, newFilePath);
+      const fileType = "reply";
+      db.run(
+        `INSERT INTO Notice (pan_number, date, din_number, address, sections, assessment_year, fileLocation, fileType) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          PAN,
+          Date,
+          DIN,
+          Address,
+          Sections,
+          AssessmentYear,
+          newFilePath,
+          fileType,
+        ],
+        function (err) {
+          if (err) {
+            return res.status(400).json({ error: err.message });
+          }
+          res.status(200).json({
+            success: true,
+            message: "Notice file uploaded and data extracted successfully",
+            data: {
+              PAN,
+              Date,
+              DIN,
+              Address,
+              Sections,
+              AssessmentYear,
+              newFilePath,
+              fileType,
+            },
+          });
+        }
+      );
+    } catch (error) {
+      console.log(error);
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
+
+app.get("/api/v1/all-documents", (req, res) => {
   db.all("SELECT * FROM Notice", [], (err, rows) => {
     if (err) {
       return res.status(500).json({ error: err.message });
@@ -126,10 +210,10 @@ app.get("/api/v1/notices", (req, res) => {
 });
 
 // Delete a notice by ID
-app.delete("/api/v1/notices/:id", (req, res) => {
-  const noticeId = req.params.id;
+app.delete("/api/v1/docs/:id", (req, res) => {
+  const docId = req.params.id;
 
-  db.run(`DELETE FROM Notice WHERE id = ?`, noticeId, function (err) {
+  db.run(`DELETE FROM Notice WHERE id = ?`, docId, function (err) {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -143,7 +227,7 @@ app.delete("/api/v1/notices/:id", (req, res) => {
 });
 
 // delete all notices
-app.delete("/api/v1/notices", (req, res) => {
+app.delete("/api/v1/docs", (req, res) => {
   db.run(`DELETE FROM Notice`, function (err) {
     if (err) {
       return res.status(500).json({ error: err.message });
