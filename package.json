@@ -1,4 +1,7 @@
 {
+  "engines": {
+    "node": "20.9.0"
+  },
   "name": "incometex",
   "version": "1.0.0",
   "description": "",
