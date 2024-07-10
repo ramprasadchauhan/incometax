@@ -36,6 +36,7 @@ const db = new sqlite3.Database("tax_reply.db");
 const port = process.env.PORT || 3000;
 
 // UPLOAD NOTICE
+
 app.post(
   "/api/v1/upload-notice",
   upload.single("notice-file"),
@@ -51,21 +52,26 @@ app.post(
       const textContent = parsedData.text;
 
       // Generate prompt for Gemini API
-      const prompt = `Clear any existing data. Based on the content ${textContent}, provide a JSON object with the following keys and their corresponding values, extracted from the text:
+      const prompt = `Based on the content ${textContent}, provide a JSON object with the following keys and their corresponding values, extracted from the text:
 
       - PAN (if available)
       - Date
       - DIN
       - Address
       - AssessmentYear
-      - Sections`;
+      - Sections
+      - Annexure`;
 
       // Call Gemini API
       const extractedData = await generateGeminiResponse(prompt);
+      console.log("extractedData", extractedData);
       const cleanedData = extractedData.replace(/```json|```/g, "");
+      console.log("cleanedData", cleanedData);
 
       const jsonData = JSON.parse(cleanedData);
-      const { Address, PAN, AssessmentYear, DIN, Date, Sections } = jsonData;
+      console.log("jsonData", jsonData);
+      const { Address, PAN, AssessmentYear, DIN, Date, Sections, Annexure } =
+        jsonData;
 
       // Create PAN directory inside month-year directory
       const panDir = path.join(uploadBaseDir, `${monthDir}/${PAN}`);
@@ -79,14 +85,15 @@ app.post(
       fs.renameSync(file.path, newFilePath);
       const fileType = "notice";
       db.run(
-        `INSERT INTO Notice (pan_number, date, din_number, address, sections, assessment_year, fileLocation, fileType) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO Notice (pan_number, date, din_number, address, sections, assessment_year, annexure, fileLocation, fileType) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           PAN,
           Date,
           DIN,
           Address,
-          Sections,
+          JSON.stringify(Sections),
           AssessmentYear,
+          JSON.stringify(Annexure),
           newFilePath,
           fileType,
         ],
@@ -104,6 +111,7 @@ app.post(
               Address,
               Sections,
               AssessmentYear,
+              Annexure,
               newFilePath,
               fileType,
             },
@@ -145,9 +153,13 @@ app.post(
 
       // Call Gemini API
       const extractedData = await generateGeminiResponse(prompt);
+      console.log("extractedData", extractedData);
       const cleanedData = extractedData.replace(/```json|```/g, "");
 
+      console.log("cleanedData", cleanedData);
+
       const jsonData = JSON.parse(cleanedData);
+      console.log("jsonData", jsonData);
       const { Address, PAN, AssessmentYear, DIN, Date, Sections } = jsonData;
 
       // Create PAN directory inside month-year directory
@@ -179,7 +191,7 @@ app.post(
           }
           res.status(200).json({
             success: true,
-            message: "Notice file uploaded and data extracted successfully",
+            message: "reply file uploaded and data extracted successfully",
             data: {
               PAN,
               Date,
@@ -200,12 +212,67 @@ app.post(
   }
 );
 
+// See all documents
+
 app.get("/api/v1/all-documents", (req, res) => {
   db.all("SELECT * FROM Notice", [], (err, rows) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    res.status(200).json({ notices: rows });
+    const notices = rows.map((row) => {
+      try {
+        return {
+          ...row,
+          sections: JSON.parse(row.sections),
+          annexure: JSON.parse(row.annexure),
+        };
+      } catch (error) {
+        console.error("Error parsing JSON:", error);
+        return {
+          ...row,
+        };
+      }
+    });
+    res.status(200).json({ notices });
+  });
+});
+
+function parseJSON(jsonString) {
+  try {
+    return JSON.parse(jsonString);
+  } catch (error) {
+    console.error("Error parsing JSON:", error);
+    return null; // Return null if parsing fails
+  }
+}
+
+// Endpoint to fetch a single document by id
+app.get("/api/v1/all-documents/:id", (req, res) => {
+  const documentId = req.params.id;
+  const sql = "SELECT * FROM Notice WHERE id = ?";
+
+  db.get(sql, [documentId], (err, row) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    if (!row) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+
+    // Parse JSON fields if they exist
+    try {
+      // const document = {
+      //   ...row,
+      //   sections: JSON.parse(row.sections),
+      //   annexure: JSON.parse(row.annexure),
+      // };
+
+      res.status(200).json({ document: row });
+    } catch (error) {
+      console.error("Error parsing JSON:", error);
+      res.status(500).json({ error: "Error retrieving document" });
+    }
   });
 });
 
@@ -239,6 +306,39 @@ app.delete("/api/v1/docs", (req, res) => {
     }
 
     res.status(200).json({ message: "All notices deleted successfully" });
+  });
+});
+
+// Endpoint to update a document by id
+app.put("/api/v1/all-documents/:id", (req, res) => {
+  const documentId = req.params.id;
+  const updateFields = req.body;
+
+  // Construct the SET clause dynamically based on the fields in the request body
+  const setClause = Object.keys(updateFields)
+    .map((key) => `${key} = ?`)
+    .join(", ");
+  const values = Object.values(updateFields);
+  values.push(documentId); // Add documentId to the end of the array for WHERE clause
+
+  const sql = `
+    UPDATE Notice 
+    SET ${setClause}
+    WHERE id = ?
+  `;
+
+  db.run(sql, values, function (err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    if (this.changes === 0) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+
+    res
+      .status(200)
+      .json({ message: "Document updated successfully", data: values });
   });
 });
 

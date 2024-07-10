@@ -17,8 +17,9 @@ db.serialize(() => {
       address TEXT,
       sections TEXT,
       assessment_year TEXT,
+      annexure TEXT,
       fileLocation TEXT,
-      fileType TEXT,
+      fileType TEXT
     )
   `);
 
