@@ -142,78 +142,118 @@ app.post(
 //       const textContent = parsedData.text;
 
 //       // Generate prompt for Gemini API
-//       const prompt = `Based on the Reply content ${textContent} from client to the notice given by department, Generate a  JSON object with the following keys and their corresponding values, extracted from the reply given by client Keys as mentioned below.:
+//       const prompt = `Based on the Reply content ${textContent} from client to the notice given by department, Generate a JSON object with the following keys and their corresponding values, extracted from the reply given by client Keys as mentioned below:
 //       - PAN (if available)
 //       - Date as Reply_Date
 //       - Subject
-//       - DIN  (If Available)
-//       - Reply From
+//       - DIN (If Available)
+//       - Reply_From
 //       - AssessmentYear
 //       - Sections
-//       - Reply Email
-//       - Reply Mobile
-//       - Reply Content generate summary of each point`;
+//       - Reply_Email
+//       - Reply_Mobile
+//       - Reply_Content generate summary of each point and store in array`;
 
 //       // Call Gemini API
 //       const extractedData = await generateGeminiResponse(prompt);
 //       console.log("extractedData", extractedData);
 //       const cleanedData = extractedData.replace(/```json|```/g, "");
-
 //       console.log("cleanedData", cleanedData);
 
 //       const jsonData = JSON.parse(cleanedData);
 //       console.log("jsonData", jsonData);
-//       const { Address, PAN, AssessmentYear, DIN, Date, Sections } = jsonData;
+//       const {
+//         PAN,
+//         Reply_Date,
+//         Subject,
+//         AssessmentYear,
+//         Reply_From,
+//         Reply_Email,
+//         Reply_Mobile,
+//         Reply_Content,
+//       } = jsonData;
 
-//       // Create PAN directory inside month-year directory
-//       const panDir = path.join(uploadBaseDir, `${monthDir}/${PAN}`);
-//       if (!fs.existsSync(panDir)) {
-//         fs.mkdirSync(panDir, { recursive: true });
-//         console.log(`Created PAN directory at ${panDir}`);
-//       }
+//       // Find the corresponding notice_id using PAN number
+//       db.get(
+//         `SELECT id, date FROM Notice WHERE pan_number = ? ORDER BY date DESC LIMIT 1`,
+//         [PAN],
+//         (err, notice) => {
+//           if (err) {
+//             return res.status(500).json({ error: err.message });
+//           }
 
-//       // Move the uploaded file to the PAN directory
-//       const newFilePath = path.join(panDir, file.originalname);
-//       fs.renameSync(file.path, newFilePath);
-//       const fileType = "reply";
-//       // db.run(
-//       //   `INSERT INTO Notice (pan_number, date, din_number, address, sections, assessment_year, fileLocation, fileType) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-//       //   [
-//       //     PAN,
-//       //     Date,
-//       //     DIN,
-//       //     Address,
-//       //     Sections,
-//       //     AssessmentYear,
-//       //     newFilePath,
-//       //     fileType,
-//       //   ],
-//       //   function (err) {
-//       //     if (err) {
-//       //       return res.status(400).json({ error: err.message });
-//       //     }
-//       //     res.status(200).json({
-//       //       success: true,
-//       //       message: "reply file uploaded and data extracted successfully",
-//       //       data: {
-//       //         PAN,
-//       //         Date,
-//       //         DIN,
-//       //         Address,
-//       //         Sections,
-//       //         AssessmentYear,
-//       //         newFilePath,
-//       //         fileType,
-//       //       },
-//       //     });
-//       //   }
-//       // );
+//           if (!notice) {
+//             return res
+//               .status(404)
+//               .json({ error: "Corresponding notice not found" });
+//           }
+
+//           const noticeId = notice.id;
+//           const noticeDate = notice.date;
+
+//           // Create PAN directory inside month-year directory
+//           const panDir = path.join(uploadBaseDir, `${monthDir}/${PAN}`);
+//           if (!fs.existsSync(panDir)) {
+//             fs.mkdirSync(panDir, { recursive: true });
+//             console.log(`Created PAN directory at ${panDir}`);
+//           }
+
+//           // Move the uploaded file to the PAN directory
+//           const newFilePath = path.join(panDir, `reply_${file.originalname}`);
+//           fs.renameSync(file.path, newFilePath);
+//           const fileType = "reply";
+
+//           // Insert reply data into Reply table
+//           db.run(
+//             `INSERT INTO Reply (pan_number, notice_id, notice_date, reply_date, subject, assessment_year, reply_from, reply_email, reply_mobile, reply_content, fileLocation, fileType) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+//             [
+//               PAN,
+//               noticeId,
+//               noticeDate,
+//               Reply_Date,
+//               Subject,
+//               AssessmentYear,
+//               Reply_From,
+//               Reply_Email,
+//               Reply_Mobile,
+//               JSON.stringify(Reply_Content),
+//               newFilePath,
+//               fileType,
+//             ],
+//             function (err) {
+//               if (err) {
+//                 return res.status(400).json({ error: err.message });
+//               }
+//               res.status(200).json({
+//                 success: true,
+//                 message: "Reply file uploaded and data extracted successfully",
+//                 data: {
+//                   PAN,
+//                   noticeId,
+//                   noticeDate,
+//                   Reply_Date,
+//                   Subject,
+//                   AssessmentYear,
+//                   Reply_From,
+//                   Reply_Email,
+//                   Reply_Mobile,
+//                   Reply_Content,
+//                   newFilePath,
+//                   fileType,
+//                 },
+//               });
+//             }
+//           );
+//         }
+//       );
 //     } catch (error) {
 //       console.log(error);
 //       res.status(400).json({ error: error.message });
 //     }
 //   }
 // );
+
+// Upload reply route
 
 app.post(
   "/api/v1/upload-reply",
@@ -240,7 +280,7 @@ app.post(
       - Sections
       - Reply_Email 
       - Reply_Mobile 
-      - Reply_Content generate summary of each point and store in array`;
+      - Reply_Content generate summary of each point in array`;
 
       // Call Gemini API
       const extractedData = await generateGeminiResponse(prompt);
@@ -263,9 +303,9 @@ app.post(
 
       // Find the corresponding notice_id using PAN number
       db.get(
-        `SELECT id, date FROM Notice WHERE pan_number = ? ORDER BY date DESC LIMIT 1`,
+        `SELECT id, date, annexure FROM Notice WHERE pan_number = ? ORDER BY date DESC LIMIT 1`,
         [PAN],
-        (err, notice) => {
+        async (err, notice) => {
           if (err) {
             return res.status(500).json({ error: err.message });
           }
@@ -278,6 +318,7 @@ app.post(
 
           const noticeId = notice.id;
           const noticeDate = notice.date;
+          const annexure = JSON.parse(notice.annexure);
 
           // Create PAN directory inside month-year directory
           const panDir = path.join(uploadBaseDir, `${monthDir}/${PAN}`);
@@ -287,9 +328,26 @@ app.post(
           }
 
           // Move the uploaded file to the PAN directory
-          const newFilePath = path.join(panDir, `reply_${file.originalname}`);
+          const newFilePath = path.join(panDir, file.originalname);
           fs.renameSync(file.path, newFilePath);
           const fileType = "reply";
+
+          // Compare Annexure questions with client responses and prepare summary
+          const summary = annexure
+            .map((question, index) => {
+              const response = Reply_Content[index];
+              return response
+                ? `Question: ${question}\nClient Response: ${response}`
+                : `Question: ${question}\nClient Response: Not responded`;
+            })
+            .join("\n\n");
+
+          // Generate final opinion using Gemini API
+          const finalOpinionPrompt = `Based on the Notice questions and the client's responses, generate a final opinion of the Gemini after comparing the notice questions and client replies, highlighting unanswered questions and summarizing the responses:
+        Notice Questions: ${JSON.stringify(annexure)}
+        Client Responses: ${JSON.stringify(jsonData.Reply_Content)}`;
+
+          const finalOpinion = await generateGeminiResponse(finalOpinionPrompt);
 
           // Insert reply data into Reply table
           db.run(
@@ -304,30 +362,30 @@ app.post(
               Reply_From,
               Reply_Email,
               Reply_Mobile,
-              JSON.stringify(Reply_Content),
+              JSON.stringify(summary),
               newFilePath,
               fileType,
             ],
             function (err) {
               if (err) {
-                return res.status(400).json({ error: err.message });
+                return res.status(500).json({ error: err.message });
               }
               res.status(200).json({
                 success: true,
-                message: "Reply file uploaded and data extracted successfully",
+                message:
+                  "Reply file uploaded, data extracted and summarized successfully",
                 data: {
                   PAN,
-                  noticeId,
-                  noticeDate,
                   Reply_Date,
                   Subject,
                   AssessmentYear,
                   Reply_From,
                   Reply_Email,
                   Reply_Mobile,
-                  Reply_Content,
+                  summary,
                   newFilePath,
                   fileType,
+                  finalOpinion,
                 },
               });
             }
