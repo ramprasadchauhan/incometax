@@ -253,7 +253,7 @@ app.post(
 //   }
 // );
 
-// Upload reply route
+// UPLOAD REPLY route
 
 app.post(
   "/api/v1/upload-reply",
@@ -343,7 +343,7 @@ app.post(
             .join("\n\n");
 
           // Generate final opinion using Gemini API
-          const finalOpinionPrompt = `Based on the Notice questions and the client's responses, generate a final opinion of the Gemini after comparing the notice questions and client replies, highlighting unanswered questions and summarizing the responses:
+          const finalOpinionPrompt = `Based on the Notice questions and the client's responses, generate a final opinion after comparing the notice questions and client replies, highlighting unanswered questions and summarizing the responses point by point detailed response max 1000 words, or summery.:
         Notice Questions: ${JSON.stringify(annexure)}
         Client Responses: ${JSON.stringify(jsonData.Reply_Content)}`;
 
@@ -422,6 +422,26 @@ app.get("/api/v1/all-notice", (req, res) => {
     });
     res.status(200).json({ notices });
   });
+});
+
+// Response
+
+app.post("/api/v1/response", async (req, res) => {
+  try {
+    const { data } = req.body;
+    if (!data) {
+      return res.status(400).send({ error: "Missing data in request body" });
+    }
+
+    // Assuming geminiGenerate is a function that takes input data and returns a generated prompt
+
+    const prompt = await generateGeminiResponse(data);
+
+    res.status(200).send({ prompt });
+  } catch (error) {
+    console.error("Error generating response:", error);
+    res.status(500).send({ error: "Failed to generate prompt" });
+  }
 });
 
 // all Reply
@@ -534,6 +554,23 @@ app.delete("/api/v1/reply", (req, res) => {
     }
 
     res.status(200).json({ message: "All reply deleted successfully" });
+  });
+});
+
+// Delete a Reply by ID
+app.delete("/api/v1/reply/:id", (req, res) => {
+  const docId = req.params.id;
+
+  db.run(`DELETE FROM Reply WHERE id = ?`, docId, function (err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    if (this.changes === 0) {
+      return res.status(404).json({ error: "Reply not found" });
+    }
+
+    res.status(200).json({ message: "Reply deleted successfully" });
   });
 });
 
