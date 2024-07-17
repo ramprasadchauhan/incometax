@@ -21,7 +21,9 @@ db.serialize(() => {
     annexure TEXT,
     fileLocation TEXT,
     fileType TEXT,
-    status TEXT DEFAULT 'open'
+    status TEXT DEFAULT 'open',
+    fileName TEXT,
+    textContent TEXT
   )`,
     (err) => {
       if (err) {
@@ -49,6 +51,8 @@ db.serialize(() => {
     fileType TEXT,
     status TEXT DEFAULT 'open',
     finalOpinion TEXT,
+    fileName TEXT,
+    textContent TEXT,
     FOREIGN KEY (notice_id) REFERENCES Notice(id)
   )`,
     (err) => {
