@@ -5,7 +5,8 @@ const db = new sqlite3.Database("tax_reply.db");
 
 db.serialize(() => {
   // Drop the Notice table if it exists (optional, if you need to reset the table)
-  db.run(`DROP TABLE IF EXISTS Notice`);
+  // db.run(`DROP TABLE IF EXISTS Notice`);
+  // db.run(`DROP TABLE IF EXISTS Reply`);
 
   // Create Notice table
   db.run(
@@ -19,7 +20,8 @@ db.serialize(() => {
     assessment_year TEXT,
     annexure TEXT,
     fileLocation TEXT,
-    fileType TEXT
+    fileType TEXT,
+    status TEXT DEFAULT 'open'
   )`,
     (err) => {
       if (err) {
@@ -45,6 +47,8 @@ db.serialize(() => {
     reply_content TEXT,
     fileLocation TEXT,
     fileType TEXT,
+    status TEXT DEFAULT 'open',
+    finalOpinion TEXT,
     FOREIGN KEY (notice_id) REFERENCES Notice(id)
   )`,
     (err) => {

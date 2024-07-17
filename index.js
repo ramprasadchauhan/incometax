@@ -37,95 +37,6 @@ const port = process.env.PORT || 3000;
 
 // UPLOAD NOTICE
 
-// app.post(
-//   "/api/v1/upload-notice",
-//   upload.single("notice-file"),
-//   async (req, res) => {
-//     const file = req.file;
-//     if (!file) {
-//       return res.status(400).json({ error: "No file uploaded" });
-//     }
-
-//     try {
-//       const buffer = fs.readFileSync(file.path);
-//       const parsedData = await pdfParse(buffer);
-//       const textContent = parsedData.text;
-
-//       // Generate prompt for Gemini API
-//       const prompt = `Based on the content ${textContent}, provide a JSON object with the following keys and their corresponding values, extracted from the text:
-
-//       - PAN (if available)
-//       - Date
-//       - DIN
-//       - Address
-//       - AssessmentYear
-//       - Sections
-//       - Annexure generate all accounts or documents or information is required by income tax in array
-//        Each question in the Annexure array should be a string clearly describing the information required`;
-
-//       // Call Gemini API
-//       const extractedData = await generateGeminiResponse(prompt);
-//       console.log("extractedData", extractedData);
-//       const cleanedData = extractedData.replace(/```json|```/g, "");
-//       console.log("cleanedData", cleanedData);
-
-//       const jsonData = JSON.parse(cleanedData);
-//       console.log("jsonData", jsonData);
-//       const { Address, PAN, AssessmentYear, DIN, Date, Sections, Annexure } =
-//         jsonData;
-
-//       // Create PAN directory inside month-year directory
-//       const panDir = path.join(uploadBaseDir, `${monthDir}/${PAN}`);
-//       if (!fs.existsSync(panDir)) {
-//         fs.mkdirSync(panDir, { recursive: true });
-//         console.log(`Created PAN directory at ${panDir}`);
-//       }
-
-//       // Move the uploaded file to the PAN directory
-//       const newFilePath = path.join(panDir, `notice_${file.originalname}`);
-//       fs.renameSync(file.path, newFilePath);
-//       const fileType = "notice";
-//       db.run(
-//         `INSERT INTO Notice (pan_number, date, din_number, address, sections, assessment_year, annexure, fileLocation, fileType) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-//         [
-//           PAN,
-//           Date,
-//           DIN,
-//           Address,
-//           JSON.stringify(Sections),
-//           AssessmentYear,
-//           JSON.stringify(Annexure),
-//           newFilePath,
-//           fileType,
-//         ],
-//         function (err) {
-//           if (err) {
-//             return res.status(400).json({ error: err.message });
-//           }
-//           res.status(200).json({
-//             success: true,
-//             message: "Notice file uploaded and data extracted successfully",
-//             data: {
-//               PAN,
-//               Date,
-//               DIN,
-//               Address,
-//               Sections,
-//               AssessmentYear,
-//               Annexure,
-//               newFilePath,
-//               fileType,
-//             },
-//           });
-//         }
-//       );
-//     } catch (error) {
-//       console.log(error);
-//       res.status(400).json({ error: error.message });
-//     }
-//   }
-// );
-
 app.post(
   "/api/v1/upload-notice",
   upload.single("notice-file"),
@@ -142,125 +53,192 @@ app.post(
 
       // Extract Date and DIN from textContent using regex
       const dateMatch = textContent.match(
-        /(?:Dated|Date|date):?\s*([0-9]{2}\/[0-9]{2}\/[0-9]{4})/i
+        /(?:Dated|Date|date):?\s*([0-9]{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+[0-9]{4}|[0-9]{1,2}[\/-][0-9]{1,2}[\/-][0-9]{4})/i
       );
       const dinMatch = textContent.match(
-        /(?:DIN|din(?: & Letter No| & Letter-No)?):\s*([A-Z0-9/()\-]+)/i
+        /(?:DIN|din(?: & Letter No| & Letter-No| and Letter No)?):\s*([A-Z0-9/()\-]+)/i
       );
 
       const Date = dateMatch ? dateMatch[1] : null;
       const DIN = dinMatch ? dinMatch[1] : null;
 
       // If both Date and DIN are not present, directly save the notice
-      if (!Date && !DIN) {
-        return saveNotice(textContent, file, res);
-      }
+      if (!DIN && !Date) {
+        // Generate prompt for Gemini API
+        const prompt = `Based on the content ${textContent}, provide a JSON object with the following keys and their corresponding values, extracted from the text:
 
-      // Check if notice with the same Date or DIN already exists in the database
-      db.get(
-        `SELECT * FROM Notice WHERE date = ? OR din_number = ?`,
-        [Date, DIN],
-        async (err, row) => {
-          if (err) {
-            return res.status(500).json({ error: err.message });
-          }
-
-          if (row) {
-            // Notice already exists, return existing data
-            fs.unlinkSync(file.path);
-            return res.status(200).json({
-              success: true,
-              message: "Notice already exists",
-              data: row,
-            });
-          }
-
-          // Save the notice as it doesn't exist in the database
-          saveNotice(textContent, Date, DIN, file, res);
-        }
-      );
-    } catch (error) {
-      console.log(error);
-      res.status(400).json({ error: error.message });
-    }
-  }
-);
-
-// Function to save notice
-async function saveNotice(textContent, file, res) {
-  try {
-    // Generate prompt for Gemini API
-    const prompt = `Based on the content ${textContent}, provide a JSON object with the following keys and their corresponding values, extracted from the text:
-  
       - PAN (if available)
       - Date
       - DIN
       - Address
       - AssessmentYear
       - Sections
-      - Annexure`;
+      - Annexure generate all accounts or documents or information is required by income tax in array
+       Each question in the Annexure array should be a string clearly describing the information required`;
 
-    // Call Gemini API
-    const extractedData = await generateGeminiResponse(prompt);
-    console.log("extractedData", extractedData);
-    const cleanedData = extractedData.replace(/```json|```/g, "");
-    console.log("cleanedData", cleanedData);
+        // Call Gemini API
+        const extractedData = await generateGeminiResponse(prompt);
+        console.log("extractedData", extractedData);
+        const cleanedData = extractedData.replace(/```json|```/g, "");
+        console.log("cleanedData", cleanedData);
 
-    const jsonData = JSON.parse(cleanedData);
-    console.log("jsonData", jsonData);
-    const { Address, PAN, AssessmentYear, DIN, Date, Sections, Annexure } =
-      jsonData;
+        const jsonData = JSON.parse(cleanedData);
+        console.log("jsonData", jsonData);
+        const { Address, PAN, AssessmentYear, DIN, Date, Sections, Annexure } =
+          jsonData;
 
-    // Create PAN directory inside month-year directory
-    const panDir = path.join(uploadBaseDir, `${monthDir}/${PAN}`);
-    if (!fs.existsSync(panDir)) {
-      fs.mkdirSync(panDir, { recursive: true });
-      console.log(`Created PAN directory at ${panDir}`);
-    }
-
-    // Move the uploaded file to the PAN directory
-    const newFilePath = path.join(panDir, `notice_${file.originalname}`);
-    fs.renameSync(file.path, newFilePath);
-    const fileType = "notice";
-    db.run(
-      `INSERT INTO Notice (pan_number, date, din_number, address, sections, assessment_year, annexure, fileLocation, fileType) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        PAN,
-        Date,
-        DIN,
-        Address,
-        JSON.stringify(Sections),
-        AssessmentYear,
-        JSON.stringify(Annexure),
-        newFilePath,
-        fileType,
-      ],
-      function (err) {
-        if (err) {
-          return res.status(400).json({ error: err.message });
+        // Create PAN directory inside month-year directory
+        const panDir = path.join(uploadBaseDir, `${monthDir}/${PAN}`);
+        if (!fs.existsSync(panDir)) {
+          fs.mkdirSync(panDir, { recursive: true });
+          console.log(`Created PAN directory at ${panDir}`);
         }
-        res.status(200).json({
-          success: true,
-          message: "Notice file uploaded and data extracted successfully",
-          data: {
+
+        // Move the uploaded file to the PAN directory
+        const newFilePath = path.join(panDir, `notice_${file.originalname}`);
+        fs.renameSync(file.path, newFilePath);
+        const fileType = "notice";
+        db.run(
+          `INSERT INTO Notice (pan_number, date, din_number, address, sections, assessment_year, annexure, fileLocation, fileType) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
             PAN,
-            Date: extractedDate || Date,
-            DIN: extractedDIN || DIN,
+            Date,
+            DIN,
             Address,
-            Sections,
+            JSON.stringify(Sections),
             AssessmentYear,
-            Annexure,
+            JSON.stringify(Annexure),
             newFilePath,
             fileType,
-          },
-        });
+          ],
+          function (err) {
+            if (err) {
+              return res.status(400).json({ error: err.message });
+            }
+            res.status(200).json({
+              success: true,
+              message: "Notice file uploaded and data extracted successfully",
+              data: {
+                PAN,
+                Date,
+                DIN,
+                Address,
+                Sections,
+                AssessmentYear,
+                Annexure,
+                newFilePath,
+                fileType,
+              },
+            });
+          }
+        );
+      } else {
+        db.get(
+          `SELECT * FROM Notice WHERE date = ? OR din_number = ?`,
+          [Date, DIN],
+          async (err, row) => {
+            if (err) {
+              return res.status(500).json({ error: err.message });
+            }
+
+            if (row) {
+              // Notice already exists, return existing data
+              fs.unlinkSync(file.path);
+              return res.status(200).json({
+                success: true,
+                message: "Notice already exists",
+                data: row,
+              });
+            }
+
+            // Generate prompt for Gemini API
+            const prompt = `Based on the content ${textContent}, provide a JSON object with the following keys and their corresponding values, extracted from the text:
+
+        - PAN (if available)
+        - Date
+        - DIN
+        - Address
+        - AssessmentYear
+        - Sections
+        - Annexure generate all accounts or documents or information is required by income tax in array
+         Each question in the Annexure array should be a string clearly describing the information required`;
+
+            // Call Gemini API
+            const extractedData = await generateGeminiResponse(prompt);
+            console.log("extractedData", extractedData);
+            const cleanedData = extractedData.replace(/```json|```/g, "");
+            console.log("cleanedData", cleanedData);
+
+            const jsonData = JSON.parse(cleanedData);
+            console.log("jsonData", jsonData);
+            const {
+              Address,
+              PAN,
+              AssessmentYear,
+              DIN,
+              Date,
+              Sections,
+              Annexure,
+            } = jsonData;
+
+            // Create PAN directory inside month-year directory
+            const panDir = path.join(uploadBaseDir, `${monthDir}/${PAN}`);
+            if (!fs.existsSync(panDir)) {
+              fs.mkdirSync(panDir, { recursive: true });
+              console.log(`Created PAN directory at ${panDir}`);
+            }
+
+            // Move the uploaded file to the PAN directory
+            const newFilePath = path.join(
+              panDir,
+              `notice_${file.originalname}`
+            );
+            fs.renameSync(file.path, newFilePath);
+            const fileType = "notice";
+            db.run(
+              `INSERT INTO Notice (pan_number, date, din_number, address, sections, assessment_year, annexure, fileLocation, fileType) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                PAN,
+                Date,
+                DIN,
+                Address,
+                JSON.stringify(Sections),
+                AssessmentYear,
+                JSON.stringify(Annexure),
+                newFilePath,
+                fileType,
+              ],
+              function (err) {
+                if (err) {
+                  return res.status(400).json({ error: err.message });
+                }
+                res.status(200).json({
+                  success: true,
+                  message:
+                    "Notice file uploaded and data extracted successfully",
+                  data: {
+                    PAN,
+                    Date,
+                    DIN,
+                    Address,
+                    Sections,
+                    AssessmentYear,
+                    Annexure,
+                    newFilePath,
+                    fileType,
+                  },
+                });
+              }
+            );
+          }
+        );
       }
-    );
-  } catch (error) {
-    console.log(error);
-    res.status(400).json({ error: error.message });
+    } catch (error) {
+      console.log(error);
+      res.status(400).json({ error: error.message });
+    }
   }
-}
+);
 
 // UPLOAD REPLY route
 
@@ -330,14 +308,14 @@ app.post(
           const annexure = JSON.parse(notice.annexure);
 
           // Create PAN directory inside month-year directory
-          const panDir = path.join(uploadBaseDir, `reply_${monthDir}/${PAN}`);
+          const panDir = path.join(uploadBaseDir, `${monthDir}/${PAN}`);
           if (!fs.existsSync(panDir)) {
             fs.mkdirSync(panDir, { recursive: true });
             console.log(`Created PAN directory at ${panDir}`);
           }
 
           // Move the uploaded file to the PAN directory
-          const newFilePath = path.join(panDir, file.originalname);
+          const newFilePath = path.join(panDir, `reply_${file.originalname}`);
           fs.renameSync(file.path, newFilePath);
           const fileType = "reply";
 
@@ -352,7 +330,7 @@ app.post(
             .join("\n\n");
 
           // Generate final opinion using Gemini API
-          const finalOpinionPrompt = `Based on the Notice questions and the client's responses, generate a final opinion after comparing the notice questions and client replies, highlighting unanswered questions and summarizing the responses point by point detailed, and Recommends relevant evidence documents based on the nature of the queries response max 1000 words, or summery.:
+          const finalOpinionPrompt = `Based on the Notice questions and the client's responses, generate a final opinion after comparing the notice questions and client replies, highlighting unanswered questions and summarizing the responses point by point, and list the  relevant evidences for unanswered questions. Gemerate total reply in max 1000 words, or summery.
         Notice Questions: ${JSON.stringify(annexure)}
         Client Responses: ${JSON.stringify(jsonData.Reply_Content)}`;
 
@@ -360,7 +338,7 @@ app.post(
 
           // Insert reply data into Reply table
           db.run(
-            `INSERT INTO Reply (pan_number, notice_id, notice_date, reply_date, subject, assessment_year, reply_from, reply_email, reply_mobile, reply_content, fileLocation, fileType) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO Reply (pan_number, notice_id, notice_date, reply_date, subject, assessment_year, reply_from, reply_email, reply_mobile, reply_content, fileLocation, fileType, finalOpinion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               PAN,
               noticeId,
@@ -374,6 +352,7 @@ app.post(
               JSON.stringify(summary),
               newFilePath,
               fileType,
+              finalOpinion,
             ],
             function (err) {
               if (err) {
