@@ -440,6 +440,57 @@ app.get("/api/v1/all-notice", (req, res) => {
   });
 });
 
+// total case
+
+app.get("/api/v1/total-case", (req, res) => {
+  db.all("SELECT * FROM Notice", [], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    try {
+      const notices = rows.map((row) => row.pan_number);
+      const total_case = new Set(notices);
+
+      return res.status(200).json({
+        success: true,
+        message: "Total case fetch successfully",
+        data: total_case.size,
+      });
+    } catch (error) {
+      console.log("Error in total case", error);
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  });
+});
+
+// pending case
+
+app.get("/api/v1/pending-case", (req, res) => {
+  db.all(`SELECT * FROM Notice WHERE status = 'open'`, [], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    try {
+      const notices = rows.map((row) => row.pan_number);
+      const total_case = new Set(notices);
+      return res.status(200).json({
+        success: true,
+        message: "Total case fetch successfully",
+        data: total_case.size,
+      });
+    } catch (error) {
+      console.log("Error in total case", error);
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  });
+});
+
 // Response
 
 app.post("/api/v1/response", async (req, res) => {
