@@ -7,11 +7,8 @@ const cors = require("cors");
 const pdfParse = require("pdf-parse");
 const sqlite3 = require("sqlite3").verbose();
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-
 dotenv.config();
-
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -23,7 +20,6 @@ const year = today.getFullYear();
 const monthDir = `${month}-${year}`;
 
 const uploadBaseDir = path.join(__dirname, "./file");
-
 if (!fs.existsSync(uploadBaseDir)) {
   fs.mkdirSync(uploadBaseDir, { recursive: true });
   console.log(`Created base upload directory at ${uploadBaseDir}`);
@@ -502,7 +498,7 @@ app.post("/api/v1/response", async (req, res) => {
 
     // Assuming geminiGenerate is a function that takes input data and returns a generated prompt
 
-    const prompt = await generateGeminiResponse(data);
+    const prompt = await generateGeminiResponse(data, 200);
 
     res.status(200).send({ prompt });
   } catch (error) {
@@ -511,7 +507,7 @@ app.post("/api/v1/response", async (req, res) => {
   }
 });
 
-// all Reply
+// All Reply
 
 app.get("/api/v1/all-reply", (req, res) => {
   db.all("SELECT * FROM Reply", [], (err, rows) => {
@@ -751,12 +747,22 @@ app.put("/api/v1/notice/:id", (req, res) => {
   });
 });
 
-async function generateGeminiResponse(prompt) {
+async function generateGeminiResponse(prompt, maxOutputTokens = 2000) {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      generationConfig: {
+        maxOutputTokens,
+        temperature: 0.9,
+      },
+    });
+
     const result = await model.generateContent(prompt);
+    console.log("result", result);
     const response = await result.response;
+    console.log("response", response);
     const text = response.text();
+    console.log("text", text);
     return text;
   } catch (error) {
     console.error("Error generating response:", error);
